@@ -9,18 +9,18 @@ const BASE_URL = "https://api.kalshi.com"; // 🔥 API CORRETA
 //
 function pemToDer(pem: string): Uint8Array {
   const base64 = pem
-    .replace(/-----(BEGIN|END) PRIVATE KEY-----/g, "")
+    .replace(/-----(BEGIN|END) RSA PRIVATE KEY-----/g, "")
     .replace(/\s+/g, "");
   return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
 //
-// ED25519 signing (Kalshi 2024+)
+// RSA signing (Kalshi using RSA private key)
 //
-async function signEd25519(privateKeyPem: string, text: string): Promise<string> {
+async function signRSA(privateKeyPem: string, text: string): Promise<string> {
   const der = pemToDer(privateKeyPem.trim());
-  const key = await subtle.importKey("pkcs8", der, { name: "Ed25519" }, false, ["sign"]);
-  const sig = await subtle.sign("Ed25519", key, Buffer.from(text));
+  const key = await subtle.importKey("pkcs1", der, { name: "RSA-PSS" }, false, ["sign"]);
+  const sig = await subtle.sign({ name: "RSA-PSS" }, key, Buffer.from(text));
   return Buffer.from(sig).toString("base64");
 }
 
@@ -44,7 +44,8 @@ export async function kalshiRequest<T>(
   const pathWithoutQuery = path.split("?")[0];
   const signPayload = timestamp + method.toUpperCase() + pathWithoutQuery;
 
-  const signature = await signEd25519(privateKey, signPayload);
+  // Use RSA para assinatura
+  const signature = await signRSA(privateKey, signPayload);
 
   const headers = {
     "KALSHI-ACCESS-KEY": keyId,
@@ -100,24 +101,4 @@ export function parseKalshiEvent(ev: any) {
   const markets = ev.markets || [];
   const homeM = markets.find((m: any) => m.title.toLowerCase().includes("home"));
   const awayM = markets.find((m: any) => m.title.toLowerCase().includes("away"));
-  const drawM = markets.find((m: any) => m.title.toLowerCase().includes("draw"));
-
-  const hp = homeM?.yes_ask ? homeM.yes_ask / 100 : 0.33;
-  const dp = drawM?.yes_ask ? drawM.yes_ask / 100 : 0.33;
-  const ap = awayM?.yes_ask ? awayM.yes_ask / 100 : 0.34;
-
-  const total = hp + dp + ap;
-
-  return {
-    id: ev.event_ticker,
-    startTime: markets[0]?.open_time || new Date().toISOString(),
-    league: ev.subtitle || ev.series_ticker || "Unknown League",
-    homeTeam: home.trim(),
-    awayTeam: away.trim(),
-    kalshiProbs: {
-      home: hp / total,
-      draw: dp / total,
-      away: ap / total,
-    },
-  };
-}
+  const drawM = markets.find((m: any) => m.title.toLowerC
